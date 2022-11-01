@@ -5,6 +5,12 @@
 #include "hook.h"
 using PostRenderHook = void(*)(uintptr_t _this, UCanvas* canvas);
 PostRenderHook pRender = 0;
+
+BOOL(*LOS)(APlayerController* controller, AShooterCharacter* pawn, FVector* vp, bool alt) = nullptr;
+BOOLEAN LineOFSightTo(APlayerController* controller, AShooterCharacter* pawn, FVector* vp) {
+	return LOS(controller, pawn, vp, false);
+}
+
 void PostRender(uintptr_t _this, UCanvas* canvas)
 {
 	if (!canvas)
@@ -29,11 +35,17 @@ void PostRender(uintptr_t _this, UCanvas* canvas)
 		USkeletalMeshComponent* Mesh = Actor->GetPawnMesh();
 		bool IsAlive = Actor->IsAlive();
 
+		FVector viewPoint = { 0, 0, 0 };
+		bool visible = LineOFSightTo(MyController, Actor, &viewPoint);
+		
+		auto EnemyColor = visible ? FLinearColor{ 0,7,7,11 } : FLinearColor{ 1, 1, 1, 1 };
+		auto TeamColor = visible ? FLinearColor{ 1, 1, 1, 1 } : FLinearColor{ 0,7,7,11 };
+		
 		if (Mesh && IsAlive)
 		{
 
 			Mesh->SetAresOutlineMode(EAresOutlineMode::AlwaysOutline, true);
-			AresOutlineRendering::SetOutlineColorsForRender(World, { 0,7,7,11 }, { 1, 1, 1, 1 });
+			AresOutlineRendering::SetOutlineColorsForRender(World, TeamColor, EnemyColor);
 
 		}
 	}
@@ -56,6 +68,8 @@ void Init()
 	ULocalPlayer* LocalPlayer = Memory::ReadStub<ULocalPlayer*>((uintptr_t)LocalPlayers); //
 	APlayerController* LocalController = Memory::ReadStub<APlayerController*>((uintptr_t)LocalPlayer + 0x38);
 	uintptr_t ViewportClient = Memory::ReadStub<uintptr_t>((uintptr_t)LocalPlayer + 0x78);
+	PBYTE addr = (PBYTE)(DWORD64)GetModuleHandleW(NULL) + 0x4BE1D40; //maybe wrong
+	LOS = reinterpret_cast<decltype(LOS)>(addr);
 	Hook::VMT((void*)ViewportClient, PostRender, 0x68, (void**)&pRender);
 }
 
